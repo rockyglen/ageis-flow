@@ -13,7 +13,7 @@ from mcp_server.database import update_status
 mcp = FastMCP("Aegis-Hands-Full-Defense")
 
 TARGET_REGION = "us-east-1"
-UI_SERVER_URL = "http://localhost:3000"
+UI_SERVER_URL = "http://52.3.229.85:3000"
 
 
 def get_boto_client(service_name):
