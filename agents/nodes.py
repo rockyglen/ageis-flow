@@ -241,6 +241,7 @@ def remediator_agent(state: AgentState):
 
             # --- ARGUMENT PATCHING FOR SECURITY GROUPS ---
             if real_func_name == "revoke_security_group_ingress":
+                args.pop("cidr_ip", None)
                 # Ensure required args exist, defaulting to standard SSH suppression
                 if "protocol" not in args:
                     args["protocol"] = "tcp"

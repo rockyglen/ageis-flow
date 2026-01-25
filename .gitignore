@@ -1,29 +1,48 @@
-# Python-generated files
+# --- PYTHON ---
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.log
+.pytest_cache/
 
-# Virtual environments
-.venv
-
-# Environment variables
+# --- ENVIRONMENT VARIABLES (CRITICAL) ---
 .env
+.env.local
+.env.*
 
-.hcl
+# --- TERRAFORM ---
+# Exclude the .terraform directory (plugins/modules)
+.terraform/
+# Exclude state files (contain sensitive resource IDs)
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+plan.out
 
+# --- OS GENERATED ---
 .DS_Store
+Thumbs.db
 
-.txt
+# --- PROJECT SPECIFIC ---
+# Exclude the local database (we want a fresh DB for each deployment)
+aegis_state.db
 
-infrastructure/terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.28.0/darwin_arm64/terraform-provider-aws_v6.28.0_x5
-infrastructure/terraform/terraform.tfstate.backup
+# Exclude the PEM key for EC2 (if you have it locally)
+*.pem
 
-infrastructure/terraform/terraform.tfstate
-infrastructure/terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.28.0/darwin_arm64/LICENSE.txt
-
-
-
-
+# --- NEXT.JS (Frontend) ---
+aegis-dashboard/.next/
+aegis-dashboard/node_modules/
+aegis-dashboard/out/
+aegis-dashboard/build/
+aegis-dashboard/.DS_Store
+aegis-dashboard/.env
+aegis-dashboard/.env.local

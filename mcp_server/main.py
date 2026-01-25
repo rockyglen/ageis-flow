@@ -7,6 +7,7 @@ import requests
 import datetime
 from mcp.server.fastmcp import FastMCP
 from botocore.exceptions import ClientError
+from mcp_server.database import update_status
 
 # Initialize the MCP Server
 mcp = FastMCP("Aegis-Hands-Full-Defense")
@@ -129,6 +130,8 @@ def restrict_iam_user(user_name: str) -> str:
         iam.attach_user_policy(UserName=user_name, PolicyArn=read_only_arn)
         log.append("Attached ReadOnlyAccess")
 
+        update_status("check_iam","SAFE")
+
         return f"SUCCESS: {user_name} neutralized.\nACTIONS: {'; '.join(log)}"
     except Exception as e:
         return f"ERROR: Failed to restrict {user_name}: {str(e)}"
@@ -193,6 +196,7 @@ def remediate_s3(bucket_name: str) -> str:
                 "RestrictPublicBuckets": True,
             },
         )
+        update_status("check_s3","SAFE")
         return f"SUCCESS: Public access blocked for bucket '{bucket_name}'."
     except Exception as e:
         return f"ERROR: Failed to remediate S3: {str(e)}"
@@ -299,6 +303,7 @@ def remediate_vpc_flow_logs(vpc_id: str) -> str:
             LogGroupName=log_group_name,
             DeliverLogsPermissionArn=role_arn,
         )
+        update_status("check_vpc","SAFE")
         return f"SUCCESS: Flow Logs enabled for {vpc_id}."
     except Exception as e:
         return f"ERROR enabling flow logs: {str(e)}"
@@ -346,6 +351,7 @@ def revoke_security_group_ingress(
             ToPort=to_port,
             IpProtocol=protocol,
         )
+        update_status("check_ssh","SAFE")
         return f"SUCCESS: Revoked 0.0.0.0/0 on port {from_port} for SG {group_id}."
     except Exception as e:
         return f"ERROR: Failed to revoke ingress on {group_id}: {str(e)}"
@@ -402,6 +408,7 @@ def enforce_imdsv2(instance_id: str) -> str:
         ec2.modify_instance_metadata_options(
             InstanceId=instance_id, HttpTokens="required", HttpEndpoint="enabled"
         )
+        update_status("check_ec2","SAFE")
         return f"SUCCESS: IMDSv2 enforced on {instance_id}."
     except Exception as e:
         return f"ERROR: Failed to enforce IMDSv2 on {instance_id}: {str(e)}"
@@ -415,6 +422,7 @@ def stop_instance(instance_id: str) -> str:
     ec2 = get_boto_client("ec2")
     try:
         ec2.stop_instances(InstanceIds=[instance_id])
+        update_status("check_ec2","SAFE")
         return f"SUCCESS: Instance {instance_id} stopped (Quarantined)."
     except Exception as e:
         return f"ERROR: Failed to stop instance {instance_id}: {str(e)}"

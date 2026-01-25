@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist Terraform state and DB so they survive restarts
+      - ./infrastructure/terraform:/app/infrastructure/terraform
+      - ./aegis_state.db:/app/aegis_state.db
+    env_file:
+      - .env  # Your secrets live here
+
+  frontend:
+    build:
+      context: ./aegis-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
