@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment variables
+.env
+
+.hcl
+
+.DS_Store
+
+.txt
+
+infrastructure/terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.28.0/darwin_arm64/terraform-provider-aws_v6.28.0_x5
+infrastructure/terraform/terraform.tfstate.backup
+
+infrastructure/terraform/terraform.tfstate
+infrastructure/terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/6.28.0/darwin_arm64/LICENSE.txt
+
+
+
+
