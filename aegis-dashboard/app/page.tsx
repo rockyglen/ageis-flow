@@ -108,7 +108,7 @@ export default function Home() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/status');
+        const res = await fetch('http://52.3.229.85:8000/api/status');
         const data = await res.json();
         setChecks(data);
       } catch (e) { console.error(e); }
@@ -121,7 +121,7 @@ export default function Home() {
   const handleApprove = async () => {
     try {
         setWaitingForApproval(false);
-        await fetch('http://localhost:8000/api/approve', { method: 'POST' });
+        await fetch('http://52.3.229.85:8000/api/approve', { method: 'POST' });
     } catch (e) { console.error(e); }
   };
 
@@ -136,7 +136,7 @@ export default function Home() {
     if (mode === 'DEFENDING') setCurrentTask('STARTING AGENT...');
 
     try {
-      const response = await fetch(`http://localhost:8000/api/${endpoint}`);
+      const response = await fetch(`http://52.3.229.85:8000/api/${endpoint}`);
       if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
