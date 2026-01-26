@@ -14,7 +14,6 @@ services:
 
       # from the IMAGE instead of the empty ones on your EC2 host.
       - /app/infrastructure/terraform/.terraform
-      - /app/infrastructure/terraform/.terraform.lock.hcl
     env_file:
       - .env  # Your secrets live here
 
