@@ -29,7 +29,7 @@ WORKDIR /app
 # 6. Install Python Dependencies
 # We do this before copying the full code to utilize Docker layer caching
 COPY pyproject.toml .
-RUN pip install --no-cache-dir fastapi uvicorn boto3 langchain langchain-google-genai pydantic python-dotenv
+RUN pip install --no-cache-dir fastapi uvicorn boto3 langchain langchain-google-genai pydantic python-dotenv mcp
 
 # 7. Copy Infrastructure and Initialize Terraform
 # This is the "Fix": We copy the TF files and RUN init during the build.
