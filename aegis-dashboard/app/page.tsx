@@ -137,6 +137,15 @@ export default function Home() {
 
     try {
       const response = await fetch(`http://52.3.229.85:8000/api/${endpoint}`);
+
+      // --- NEW: CONCURRENCY CHECK ---
+      if (response.status === 429) {
+        const errorData = await response.json();
+        alert(errorData.detail || "⚠️ Demo in progress! Another user is currently running a simulation.");
+        setCurrentTask('SYSTEM BUSY');
+        return; // Exit without streaming
+      }
+
       if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -185,7 +194,8 @@ export default function Home() {
     } finally {
       setIsRunning(false);
       setStatus('IDLE');
-      setCurrentTask('OPERATION COMPLETE');
+      // Only set "COMPLETE" if we didn't just hit the "BUSY" state
+      setCurrentTask(prev => prev === 'SYSTEM BUSY' ? 'SYSTEM BUSY' : 'OPERATION COMPLETE');
     }
   };
 

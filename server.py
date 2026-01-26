@@ -21,7 +21,7 @@ app.add_middleware(
 init_db()
 
 TERRAFORM_DIR = os.path.join(os.getcwd(), "infrastructure", "terraform")
-
+simulation_lock = threading.Lock()
 # --- GLOBAL PROCESS STATE ---
 # This allows us to "pause" the agent and resume it from a different API call
 class ProcessManager:
@@ -124,19 +124,42 @@ def execute_terraform(command):
 
 @app.get("/api/reset")
 def reset_lab():
-    def reset_sequence():
-        yield "\n>>> [PHASE 1] INITIALIZING DESTRUCTION...\n"
-        for line in execute_terraform("terraform destroy -auto-approve"): yield line
-        
-        yield "\n>>> [PHASE 2] INJECTING VULNERABILITIES (DB UPDATE)...\n"
-        reset_to_vulnerable()
-        yield ">>> [DB] DASHBOARD STATUS SET TO: 🔴 VULNERABLE\n"
+    if not simulation_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=429, 
+            detail="⚠️ Demo in progress! Another user is currently running a simulation. Please try again in a minute."
+        )
 
-        yield "\n>>> [PHASE 3] DEPLOYING VULNERABLE INFRASTRUCTURE...\n"
-        for line in execute_terraform("terraform apply -auto-approve"): yield line
-        yield "\n>>> [COMPLETE] ENVIRONMENT COMPROMISED.\n"
+    def reset_sequence():
+        try:
+            yield "\n>>> [PHASE 1] INITIALIZING DESTRUCTION...\n"
+            for line in execute_terraform("terraform destroy -auto-approve"): yield line
+            
+            yield "\n>>> [PHASE 2] INJECTING VULNERABILITIES (DB UPDATE)...\n"
+            reset_to_vulnerable()
+            yield ">>> [DB] DASHBOARD STATUS SET TO: 🔴 VULNERABLE\n"
+
+            yield "\n>>> [PHASE 3] DEPLOYING VULNERABLE INFRASTRUCTURE...\n"
+            for line in execute_terraform("terraform apply -auto-approve"): yield line
+            yield "\n>>> [COMPLETE] ENVIRONMENT COMPROMISED.\n"
+        
+        except Exception as e:
+            yield f"\n[INTERNAL ERROR] {str(e)}\n"
+        
+        finally:
+            # 2. Release Lock when stream finishes or client disconnects
+            simulation_lock.release()
 
     return StreamingResponse(reset_sequence(), media_type="text/plain")
+
+@app.post("/api/admin/force-unlock")
+def force_unlock():
+    """Emergency valve to clear the lock if the server gets stuck."""
+    if simulation_lock.locked():
+        simulation_lock.release()
+        return {"status": "lock_released", "message": "System is now free for new simulations."}
+    return {"status": "already_free", "message": "No lock was active."}
+
 
 if __name__ == "__main__":
     import uvicorn
