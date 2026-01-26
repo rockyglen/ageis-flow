@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ShieldAlert, Terminal, Activity } from 'lucide-react'; 
+import { ShieldAlert, Terminal, Activity, Info, BookOpen } from 'lucide-react'; 
 
 interface ComplianceCheck {
   id: string;
@@ -222,6 +222,29 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* --- NARRATIVE GUIDE SECTION (NEW) --- */}
+      <section className="max-w-7xl mx-auto mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-blue-950/20 border border-blue-500/30 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-3 text-blue-400">
+            <BookOpen className="w-5 h-5" />
+            <h2 className="font-bold uppercase text-xs tracking-widest">How to Demo</h2>
+          </div>
+          <div className="text-sm text-slate-400 space-y-2">
+            <p><span className="text-red-400 font-bold">Step 1:</span> Click <strong>Simulate Breach</strong> to trigger a Cloud Disaster. This uses Terraform to wipe your secure AWS environment and redeploy it with critical vulnerabilities (Public S3, Admin Keys, Open Ports).</p>
+            <p><span className="text-blue-400 font-bold">Step 2:</span> Click <strong>Deploy AEGIS</strong>. The AI Agent will use the Model Context Protocol (MCP) to audit your AWS account, identify the specific risks, and build a remediation plan.</p>
+          </div>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-3 text-slate-400">
+            <Info className="w-5 h-5" />
+            <h2 className="font-bold uppercase text-xs tracking-widest">Under the Hood</h2>
+          </div>
+          <div className="text-xs text-slate-500 leading-relaxed">
+            The backend manages a <strong>Global Mutex Lock</strong> to prevent concurrent Terraform state corruption. When you authorize a fix, the agent executes targeted CLI commands to restore your security posture without human intervention.
+          </div>
+        </div>
+      </section>
 
       {/* INFRASTRUCTURE HEALTH */}
       <section className="max-w-7xl mx-auto mb-8">
