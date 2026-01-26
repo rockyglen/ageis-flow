@@ -137,14 +137,23 @@ def report_generator_node(state: AgentState):
 def safety_gate_node(state: AgentState):
     """
     Phase 3: The Checkpoint.
-    This node serves as a placeholder. The actual pause is handled in main.py logic.
+    Checks if the system is secure. If so, skips the scary 'PAUSE' message.
     """
-    print(
-        f"\n>>> AUDIT COMPLETE. FINDINGS: \n{state.get('audit_summary', 'No summary')}\n"
-    )
-    print(
-        ">>> PAUSING FOR HUMAN REVIEW. (Remediation will strictly NOT proceed without approval)."
-    )
+    summary = state.get("audit_summary", "No summary")
+    
+    # --- FIX START ---
+    # Convert list-based content (Gemini quirk) to string for safety
+    summary_str = str(summary)
+    
+    # Check for the magic "SYSTEM SECURE" string from the Report Generator
+    if "SYSTEM SECURE" in summary_str:
+        print("\n>>> AUDIT COMPLETE: ✅ SYSTEM SECURE. No risks detected.")
+        print(">>> SKIPPING HUMAN REVIEW (Nothing to fix).\n")
+        return # Do nothing, main.py will handle the exit
+    # --- FIX END ---
+
+    print(f"\n>>> AUDIT COMPLETE. FINDINGS: \n{summary_str}\n")
+    print(">>> PAUSING FOR HUMAN REVIEW. (Remediation will strictly NOT proceed without approval).")
     pass
 
 
