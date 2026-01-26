@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir fastapi uvicorn boto3 langchain langchain-google-
 
 # 6. Copy Application Code
 COPY infrastructure/ ./infrastructure/
+RUN terraform -chdir=infrastructure/terraform init
 COPY agents/ ./agents/
 COPY mcp_server/ ./mcp_server/
 COPY main.py .
