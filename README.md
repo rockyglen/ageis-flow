@@ -103,7 +103,7 @@ python main.py
 
 ## Repository Structure
 
-  - /agents: LangGraph state definitions and agent nodes.
+  - `/agents`: LangGraph state definitions and agent nodes.
 
   - /infrastructure/terraform: Lab environment with intentional vulnerabilities.
 
@@ -112,6 +112,7 @@ python main.py
   - /aegis-dashboard: Next.js web interface.
 
   - main.py: Entry point for the interactive CLI session.
+
 
 
 
