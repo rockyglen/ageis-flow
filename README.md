@@ -96,6 +96,7 @@ python main.py
 
 ## Usage
 
-  -- Audit: Upon execution, the agent automatically initializes a security scan of the us-east-1 region.
+  - Audit: Upon execution, the agent automatically initializes a security scan of the us-east-1 region.
+
 
 
