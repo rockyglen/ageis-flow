@@ -105,13 +105,14 @@ python main.py
 
   - `/agents`: LangGraph state definitions and agent nodes.
 
-  - /infrastructure/terraform: Lab environment with intentional vulnerabilities.
+  - `/infrastructure/terraform`: Lab environment with intentional vulnerabilities.
 
-  - /mcp_server: AWS tool implementations and database connectors.
+  - `/mcp_server`: AWS tool implementations and database connectors.
 
-  - /aegis-dashboard: Next.js web interface.
+  - `/aegis-dashboard`: Next.js web interface.
 
-  - main.py: Entry point for the interactive CLI session.
+  - `main.py`: Entry point for the interactive CLI session.
+
 
 
 
