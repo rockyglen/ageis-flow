@@ -101,5 +101,18 @@ python main.py
   - Approve: Type approve in the terminal to authorize the agent to begin remediation.
   - Remediate: The agent executes the necessary AWS API calls to secure the environment and updates the dashboard status.
 
+## Repository Structure
+
+  - /agents: LangGraph state definitions and agent nodes.
+
+  - /infrastructure/terraform: Lab environment with intentional vulnerabilities.
+
+  - /mcp_server: AWS tool implementations and database connectors.
+
+  - /aegis-dashboard: Next.js web interface.
+
+  - main.py: Entry point for the interactive CLI session.
+
+
 
 
