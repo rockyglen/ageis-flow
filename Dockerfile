@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     gnupg \
     lsb-release \
+    libpq-dev gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Install Terraform
@@ -16,12 +17,11 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sh
     && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
     && apt-get update && apt-get install -y terraform
 
-# 4. Install AWS CLI (v2)
+# 4. Install Google Cloud SDK
 # Required for the agent to authenticate and manage cloud resources
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
-    && unzip awscliv2.zip \
-    && ./aws/install \
-    && rm -rf aws awscliv2.zip
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && apt-get update && apt-get install -y google-cloud-cli
 
 # 5. Set Working Directory
 WORKDIR /app
@@ -29,11 +29,11 @@ WORKDIR /app
 # 6. Install Python Dependencies
 # We do this before copying the full code to utilize Docker layer caching
 COPY pyproject.toml .
-RUN pip install --no-cache-dir fastapi uvicorn boto3 langchain langchain-google-genai pydantic python-dotenv mcp
+RUN pip install --no-cache-dir fastapi uvicorn google-cloud-storage langchain langchain-google-genai pydantic python-dotenv mcp boto3 psycopg2-binary
 
 # 7. Copy Infrastructure and Initialize Terraform
 # This is the "Fix": We copy the TF files and RUN init during the build.
-# This downloads the AWS and Null providers into the image itself.
+# This downloads the Google and Null providers into the image itself.
 COPY infrastructure/ ./infrastructure/
 RUN terraform -chdir=infrastructure/terraform init
 
@@ -48,6 +48,7 @@ COPY server.py .
 RUN python -c "from mcp_server.database import init_db; init_db()"
 
 # 10. Final Configuration
-EXPOSE 8000
+ENV PORT=8080
+EXPOSE 8080
 # -u flag ensures Python logs are unbuffered (visible in real-time in 'docker logs')
 CMD ["python", "-u", "server.py"]

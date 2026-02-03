@@ -1,3 +1,10 @@
+terraform {
+  backend "gcs" {
+    bucket = "aegis_terra"
+    prefix = "terraform/state"
+  }
+}
+
 ############################################
 # AEGIS-FLOW | INTENTIONALLY INSECURE LAB
 # Purpose: Security Detection & Remediation

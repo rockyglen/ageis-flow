@@ -6,6 +6,13 @@ __pycache__/
 venv/
 *.log
 .pytest_cache/
+*.egg-info/
+dist/
+build/
+htmlcov/
+*.sqlite3
+
+*.sh
 
 # --- ENVIRONMENT VARIABLES (CRITICAL) ---
 .env
@@ -38,11 +45,4 @@ aegis_state.db
 # Exclude the PEM key for EC2 (if you have it locally)
 *.pem
 
-# --- NEXT.JS (Frontend) ---
-aegis-dashboard/.next/
-aegis-dashboard/node_modules/
-aegis-dashboard/out/
-aegis-dashboard/build/
-aegis-dashboard/.DS_Store
-aegis-dashboard/.env
-aegis-dashboard/.env.local
+env_vars.yaml

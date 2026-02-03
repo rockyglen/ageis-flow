@@ -1,7 +1,10 @@
 import subprocess
 import os
+import sys
+import signal
 import threading
 import queue
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -18,9 +21,22 @@ app.add_middleware(
 )
 
 # Ensure DB exists
-init_db()
+max_retries = 5
+for i in range(max_retries):
+    try:
+        init_db()
+        print("✅ Database initialized successfully.")
+        break
+    except Exception as e:
+        if i == max_retries - 1:
+            print(f"❌ [CRITICAL] Database Connection Failed after {max_retries} attempts: {e}")
+            print("💡 TIP: Check Cloud SQL API, IAM Roles, and ensure the database exists.")
+            raise e
+        print(f"⚠️ Database connection failed (attempt {i+1}/{max_retries}). Retrying in 3s...")
+        time.sleep(3)
 
-TERRAFORM_DIR = os.path.join(os.getcwd(), "infrastructure", "terraform")
+# Allow overriding Terraform directory via env var (useful for persistent volume mounts)
+TERRAFORM_DIR = os.environ.get("TERRAFORM_DIR", os.path.join(os.getcwd(), "infrastructure", "terraform"))
 simulation_lock = threading.Lock()
 # --- GLOBAL PROCESS STATE ---
 # This allows us to "pause" the agent and resume it from a different API call
@@ -88,6 +104,16 @@ class ProcessManager:
 
 agent_manager = ProcessManager()
 
+# --- SIGNAL HANDLING ---
+def handle_sigterm(*args):
+    """Gracefully handle Cloud Run shutdown signals"""
+    print("[SYSTEM] Received SIGTERM. Shutting down agent...")
+    if agent_manager.process and agent_manager.process.poll() is None:
+        agent_manager.process.terminate()
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, handle_sigterm)
+
 # --- ROUTES ---
 
 @app.get("/api/status")
@@ -111,14 +137,24 @@ def approve_remediation():
 def execute_terraform(command):
     """Simple runner for Terraform (no interaction needed)"""
     try:
+        # 1. Force non-interactive mode to prevent hanging on missing vars
+        if "terraform" in command and "-input=false" not in command:
+            command += " -input=false"
+
+        # 2. Pass environment variables (Crucial for Cloud Run auth & vars)
+        env = os.environ.copy()
+        env["TF_IN_AUTOMATION"] = "true"
+
         process = subprocess.Popen(
             command, cwd=TERRAFORM_DIR, shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            env=env
         )
         for line in iter(process.stdout.readline, ''):
             if line: yield line
         process.stdout.close()
-        process.wait()
+        if process.wait() != 0:
+            yield "\n[ERROR] Terraform command failed. Check logs above for details.\n"
     except Exception as e:
         yield f"\n[CRITICAL ERROR] {str(e)}\n"
 
@@ -163,4 +199,5 @@ def force_unlock():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)

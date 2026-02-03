@@ -1,0 +1,24 @@
+# Secrets (Keep these local only)
+.env
+env_vars.yaml
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+
+# Dependencies & Build Artifacts
+venv/
+node_modules/
+__pycache__/
+*.pyc
+
+# Terraform State
+*.tfstate
+*.tfstate.backup
+infrastructure/terraform/.terraform
+
+# OS
+.DS_Store

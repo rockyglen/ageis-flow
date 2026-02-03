@@ -8,10 +8,6 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Persist Terraform state and DB so they survive restarts
-      - ./infrastructure/terraform:/app/infrastructure/terraform
-      - ./aegis_state.db:/app/aegis_state.db
-
       # from the IMAGE instead of the empty ones on your EC2 host.
       - /app/infrastructure/terraform/.terraform
     env_file:

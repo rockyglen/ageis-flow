@@ -10,6 +10,8 @@ interface ComplianceCheck {
   status: 'SAFE' | 'VULNERABLE';
 }
 
+const URL = "https://aegis-backend-4wot3ljcaq-uc.a.run.app"
+
 // --- 1. SMART FORMATTER ENGINE ---
 // This cleans up the messy Markdown logs and rewrites them into human-readable text
 const humanizeLog = (rawLine: string): string | null => {
@@ -108,7 +110,7 @@ export default function Home() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const res = await fetch('http://52.3.229.85:8000/api/status');
+        const res = await fetch(`${URL}/api/status`);
         const data = await res.json();
         setChecks(data);
       } catch (e) { console.error(e); }
@@ -121,7 +123,7 @@ export default function Home() {
   const handleApprove = async () => {
     try {
         setWaitingForApproval(false);
-        await fetch('http://52.3.229.85:8000/api/approve', { method: 'POST' });
+        await fetch(`${URL}/api/approve`, { method: 'POST' });
     } catch (e) { console.error(e); }
   };
 
@@ -136,7 +138,7 @@ export default function Home() {
     if (mode === 'DEFENDING') setCurrentTask('STARTING AGENT...');
 
     try {
-      const response = await fetch(`http://52.3.229.85:8000/api/${endpoint}`);
+      const response = await fetch(`${URL}/api/${endpoint}`);
 
       // --- NEW: CONCURRENCY CHECK ---
       if (response.status === 429) {
