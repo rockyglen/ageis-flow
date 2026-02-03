@@ -97,6 +97,9 @@ python main.py
 ## Usage
 
   - Audit: Upon execution, the agent automatically initializes a security scan of the us-east-1 region.
+  - Review: The agent will pause and output a summary of findings, such as "Rogue Public S3 bucket created".
+  - Approve: Type approve in the terminal to authorize the agent to begin remediation.
+  - Remediate: The agent executes the necessary AWS API calls to secure the environment and updates the dashboard status.
 
 
 
