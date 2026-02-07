@@ -116,8 +116,4 @@ python main.py
 
 ## Demo
 
-  - `https://aegis-frontend-4wot3ljcaq-uc.a.run.app`
-
-
-
-
+  [Live Dashboard](https://aegis-frontend-4wot3ljcaq-uc.a.run.app)
