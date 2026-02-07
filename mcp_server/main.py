@@ -3,15 +3,17 @@
 import boto3
 import json
 import time
-import requests
 import datetime
 import os
 from mcp.server.fastmcp import FastMCP
 from botocore.exceptions import ClientError
-from mcp_server.database import update_status
+from mcp_server.database import update_status, init_db
 
 # Initialize the MCP Server
 mcp = FastMCP("Aegis-Hands-Full-Defense")
+
+# Ensure DB is initialized on startup (Critical for Cloud Run)
+init_db()
 
 TARGET_REGION = "us-east-1"
 UI_SERVER_URL = os.environ.get("UI_SERVER_URL", "http://localhost:3000")
@@ -26,11 +28,9 @@ def log_to_ui(message: str):
     """Helper to send logs to the React Dashboard and stdout."""
     print(f"[AGENT LOG]: {message}")
     try:
-        requests.post(
-            f"{UI_SERVER_URL}/log",
-            json={"source": "AGENT", "message": message},
-            timeout=2,
-        )
+        # In a real deployment, we might push to a queue or use SSE.
+        # For this demo, we just print to stdout which Cloud Run captures.
+        pass
     except:
         pass
 
@@ -83,11 +83,12 @@ def list_attached_user_policies(username: str) -> str:
             for policy_name in page["PolicyNames"]:
                 policies.append(f"Inline: {policy_name}")
 
-        return (
-            f"User '{username}' Policies: {', '.join(policies)}"
-            if policies
-            else f"User '{username}' has no attached policies."
-        )
+        result = f"User '{username}' Policies: {', '.join(policies)}" if policies else f"User '{username}' has no attached policies."
+        
+        # Add explicit flag for the LLM to catch
+        if "AdministratorAccess" in result and username != "admin":
+            result += " [⚠️ CRITICAL SECURITY VIOLATION: NON-ADMIN USER HAS ADMIN ACCESS. MUST CALL restrict_iam_user IMMEDIATELY.]"
+        return result
     except Exception as e:
         return f"Error checking policies for {username}: {str(e)}"
 
@@ -111,22 +112,25 @@ def restrict_iam_user(user_name: str) -> str:
                     UserName=user_name, PolicyArn=policy["PolicyArn"]
                 )
                 log.append(f"Detached: {policy['PolicyName']}")
-        # Remove from Groups
-        for page in iam.get_paginator("list_groups_for_user").paginate(
-            UserName=user_name
-        ):
-            for group in page["Groups"]:
-                iam.remove_user_from_group(
-                    UserName=user_name, GroupName=group["GroupName"]
-                )
-                log.append(f"Removed from group: {group['GroupName']}")
-        # Delete Inline
-        for page in iam.get_paginator("list_user_policies").paginate(
-            UserName=user_name
-        ):
-            for policy_name in page["PolicyNames"]:
-                iam.delete_user_policy(UserName=user_name, PolicyName=policy_name)
-                log.append(f"Deleted inline policy: {policy_name}")
+        
+        # Remove from Groups (Handle errors gracefully)
+        try:
+            for page in iam.get_paginator("list_groups_for_user").paginate(UserName=user_name):
+                for group in page["Groups"]:
+                    iam.remove_user_from_group(UserName=user_name, GroupName=group["GroupName"])
+                    log.append(f"Removed from group: {group['GroupName']}")
+        except Exception as e:
+            log.append(f"Warning (Groups): {str(e)}")
+
+        # Delete Inline (Handle errors gracefully)
+        try:
+            for page in iam.get_paginator("list_user_policies").paginate(UserName=user_name):
+                for policy_name in page["PolicyNames"]:
+                    iam.delete_user_policy(UserName=user_name, PolicyName=policy_name)
+                    log.append(f"Deleted inline policy: {policy_name}")
+        except Exception as e:
+            log.append(f"Warning (Inline): {str(e)}")
+            
         # Attach ReadOnly
         iam.attach_user_policy(UserName=user_name, PolicyArn=read_only_arn)
         log.append("Attached ReadOnlyAccess")
@@ -331,6 +335,11 @@ def audit_security_groups() -> list:
                                 "Risk": "OPEN TO WORLD (0.0.0.0/0)",
                             }
                         )
+        
+        if not risky_groups:
+            update_status("check_ssh", "SAFE")
+            return ["No risky Security Groups found. System is SAFE."]
+            
     except Exception as e:
         return [f"Error auditing SGs: {str(e)}"]
     return risky_groups if risky_groups else ["No risky Security Groups found."]
@@ -354,6 +363,12 @@ def revoke_security_group_ingress(
         )
         update_status("check_ssh","SAFE")
         return f"SUCCESS: Revoked 0.0.0.0/0 on port {from_port} for SG {group_id}."
+    except ClientError as e:
+        # If the rule is already gone, we consider it a success and mark as SAFE
+        if e.response['Error']['Code'] == 'InvalidPermission.NotFound':
+            update_status("check_ssh", "SAFE")
+            return f"SUCCESS: Rule was already revoked (Idempotent fix)."
+        return f"ERROR: Failed to revoke ingress on {group_id}: {str(e)}"
     except Exception as e:
         return f"ERROR: Failed to revoke ingress on {group_id}: {str(e)}"
 

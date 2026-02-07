@@ -5,6 +5,7 @@ import os
 try:
     import psycopg2
     import psycopg2.extras
+    import psycopg2.extensions
 except ImportError:
     psycopg2 = None
 
@@ -17,7 +18,7 @@ def get_db_type():
         return "postgres"
     return "sqlite"
 
-def get_connection():
+def get_connection(db_override=None):
     """Establishes a connection to either SQLite or PostgreSQL."""
     if get_db_type() == "postgres":
         if not psycopg2:
@@ -25,14 +26,16 @@ def get_connection():
         
         db_user = os.environ.get("DB_USER", "postgres")
         db_pass = os.environ.get("DB_PASS", "password")
-        db_name = os.environ.get("DB_NAME", "aegis_db")
+        db_name = db_override if db_override else os.environ.get("DB_NAME", "aegis_db")
         
         # Option A: Cloud Run via Unix Socket (Recommended for Cloud Run)
         if os.environ.get("CLOUD_SQL_CONNECTION_NAME"):
             unix_socket = f"/cloudsql/{os.environ.get('CLOUD_SQL_CONNECTION_NAME')}"
+            # print(f"[DB] Connecting via Cloud SQL Socket: {unix_socket}")
             return psycopg2.connect(user=db_user, password=db_pass, dbname=db_name, host=unix_socket)
         
         # Option B: TCP Connection (Local dev or specific host)
+        print(f"[DB] Connecting via TCP: {os.environ.get('DB_HOST', 'localhost')}")
         return psycopg2.connect(
             user=db_user, 
             password=db_pass, 
@@ -44,10 +47,39 @@ def get_connection():
         # Fallback to SQLite
         return sqlite3.connect(DB_PATH)
 
+def create_postgres_db():
+    """Connects to default 'postgres' DB to create the target DB if missing."""
+    print("[DB] Attempting to create missing database...")
+    try:
+        # Connect to default 'postgres' database
+        conn = get_connection(db_override="postgres")
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        c = conn.cursor()
+        target_db = os.environ.get("DB_NAME", "aegis_db")
+        # Check if exists first to be safe
+        c.execute(f"SELECT 1 FROM pg_database WHERE datname = '{target_db}'")
+        if not c.fetchone():
+            c.execute(f"CREATE DATABASE {target_db}")
+            print(f"[DB] Successfully created database: {target_db}")
+        else:
+            print(f"[DB] Database {target_db} already exists.")
+        conn.close()
+    except Exception as e:
+        print(f"[DB] Failed to create database: {e}")
+
 def init_db():
     db_type = get_db_type()
     print(f"[DB] Initializing database mode: {db_type.upper()}")
-    conn = get_connection()
+    try:
+        conn = get_connection()
+    except Exception as e:
+        # If Postgres and DB doesn't exist, try to create it
+        if db_type == "postgres" and ('database "' in str(e) and 'does not exist' in str(e)):
+            create_postgres_db()
+            conn = get_connection() # Retry
+        else:
+            raise e
+            
     c = conn.cursor()
     
     # Create table (Syntax is compatible with both for this simple schema)
@@ -85,10 +117,15 @@ def update_status(check_id: str, status: str):
     conn = get_connection()
     c = conn.cursor()
     
+    print(f"[DB] Updating {check_id} -> {status}")
+    
     if get_db_type() == "postgres":
         c.execute("UPDATE compliance_checks SET status = %s WHERE id = %s", (status, check_id))
     else:
         c.execute("UPDATE compliance_checks SET status = ? WHERE id = ?", (status, check_id))
+    
+    if c.rowcount == 0:
+        print(f"[DB] WARNING: Update failed. Check ID '{check_id}' not found in DB.")
         
     conn.commit()
     conn.close()
@@ -116,5 +153,7 @@ def reset_to_vulnerable():
     c = conn.cursor()
     # Set all to VULNERABLE
     c.execute("UPDATE compliance_checks SET status = 'VULNERABLE'")
+    
+
     conn.commit()
     conn.close()

@@ -1,9 +1,11 @@
+
 terraform {
   backend "gcs" {
     bucket = "aegis_terra"
     prefix = "terraform/state"
   }
 }
+
 
 ############################################
 # AEGIS-FLOW | INTENTIONALLY INSECURE LAB
@@ -180,43 +182,20 @@ resource "null_resource" "insider_threat_simulation" {
       AWS_SECRET_ACCESS_KEY = aws_iam_access_key.dev_user_key.secret
       AWS_DEFAULT_REGION    = "us-east-1"
       BUCKET_NAME           = "aegis-rogue-bucket-static-demo"
+      SG_ID                 = aws_security_group.vulnerable_sg.id
+      INSTANCE_ID           = aws_instance.vulnerable_ec2.id
     }
 
-    command = <<EOT
-      # Fail immediately if any command fails
-      set -e 
-      
-      echo "⏳ Waiting 20s for IAM keys to propagate (avoiding InvalidToken error)..."
-      sleep 20
-
-      echo "😈 SIMULATING INSIDER THREAT: Logging in as dev-user-01..."
-      
-      # --- CRIME 1: S3 VULNERABILITY ---
-      # 1. Create Bucket
-      aws s3api create-bucket --bucket $BUCKET_NAME
-      # 2. Disable Public Block
-      aws s3api delete-public-access-block --bucket $BUCKET_NAME
-      # 3. Tagging (Evidence)
-      aws s3api put-bucket-tagging --bucket $BUCKET_NAME --tagging 'TagSet=[{Key=CreatedBy,Value=dev-user-01},{Key=Risk,Value=High}]'
-
-      # --- CRIME 2: NETWORK VULNERABILITY ---
-      # 4. Open Security Group (SSH 0.0.0.0/0)
-      echo "🔓 Opening Security Group to the world..."
-      aws ec2 authorize-security-group-ingress --group-id ${aws_security_group.vulnerable_sg.id} --protocol tcp --port 22 --cidr 0.0.0.0/0
-
-      # --- CRIME 3: COMPUTE VULNERABILITY ---
-      # 5. Downgrade IMDS (Enable IMDSv1)
-      echo "🔓 Downgrading EC2 Metadata security..."
-      aws ec2 modify-instance-metadata-options --instance-id ${aws_instance.vulnerable_ec2.id} --http-tokens optional --http-endpoint enabled
-
-      echo "✅ CRIME SPREE COMPLETE: S3, Network, and Compute compromised by dev-user-01"
-    EOT
+    command = "python3 crime.py"
   }
 
   # DESTRUCTION: Cleanup on 'terraform destroy'
   provisioner "local-exec" {
     when    = destroy
-    command = "aws s3 rb s3://aegis-rogue-bucket-static-demo --force || echo 'Bucket already deleted or not found'"
+    environment = {
+      BUCKET_NAME = "aegis-rogue-bucket-static-demo"
+    }
+    command = "python3 crime.py destroy"
   }
 }
 

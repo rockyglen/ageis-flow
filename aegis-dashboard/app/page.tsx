@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ShieldAlert, Terminal, Activity, Info, BookOpen } from 'lucide-react'; 
+import { ShieldAlert, Terminal, Activity, Info, BookOpen, Square } from 'lucide-react'; 
 
 interface ComplianceCheck {
   id: string;
@@ -102,6 +102,7 @@ export default function Home() {
   const [status, setStatus] = useState<'IDLE' | 'ATTACKING' | 'DEFENDING'>('IDLE');
   const [waitingForApproval, setWaitingForApproval] = useState(false);
   const [remediationPlan, setRemediationPlan] = useState<{resource: string, action: string}[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
@@ -127,6 +128,19 @@ export default function Home() {
     } catch (e) { console.error(e); }
   };
 
+  const handleQuit = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    try {
+      await fetch(`${URL}/api/stop`, { method: 'POST' });
+    } catch (e) { console.error(e); }
+    setIsRunning(false);
+    setStatus('IDLE');
+    setCurrentTask('OPERATION STOPPED');
+  };
+
   const streamLogs = async (endpoint: string, mode: 'ATTACKING' | 'DEFENDING') => {
     setIsRunning(true);
     setStatus(mode);
@@ -137,8 +151,11 @@ export default function Home() {
     if (mode === 'ATTACKING') setCurrentTask('INITIALIZING ATTACK...');
     if (mode === 'DEFENDING') setCurrentTask('STARTING AGENT...');
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const response = await fetch(`${URL}/api/${endpoint}`);
+      const response = await fetch(`${URL}/api/${endpoint}`, { signal: controller.signal });
 
       // --- NEW: CONCURRENCY CHECK ---
       if (response.status === 429) {
@@ -161,6 +178,7 @@ export default function Home() {
         
         lines.forEach(rawLine => {
             // 1. RAW LINE CHECKS (Before Cleanup) for Logic Triggers
+            if (rawLine.includes("[PHASE 0]")) setCurrentTask("PHASE 0: SANITIZING STATE");
             if (rawLine.includes("[PHASE 1]")) setCurrentTask("PHASE 1: DESTROYING INFRASTRUCTURE");
             if (rawLine.includes("[PHASE 2]")) setCurrentTask("PHASE 2: INJECTING VULNERABILITIES");
             if (rawLine.includes("REMEDIATION EXECUTION PLAN")) setCurrentTask("PHASE 2: PLANNING REMEDIATION");
@@ -191,7 +209,11 @@ export default function Home() {
             }
         });
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setLogs((prev) => [...prev, "\n[SYSTEM] Operation aborted by user."]);
+        return;
+      }
       setLogs((prev) => [...prev, `[UI ERROR] ${err}`]);
     } finally {
       setIsRunning(false);
@@ -232,9 +254,55 @@ export default function Home() {
             <BookOpen className="w-5 h-5" />
             <h2 className="font-bold uppercase text-xs tracking-widest">How to Demo</h2>
           </div>
-          <div className="text-sm text-slate-400 space-y-2">
-            <p><span className="text-red-400 font-bold">Step 1:</span> Click <strong>Simulate Breach</strong> to trigger a Cloud Disaster. This uses Terraform to wipe your secure AWS environment and redeploy it with critical vulnerabilities (Public S3, Admin Keys, Open Ports).</p>
-            <p><span className="text-blue-400 font-bold">Step 2:</span> Click <strong>Deploy AEGIS</strong>. The AI Agent will use the Model Context Protocol (MCP) to audit your AWS account, identify the specific risks, and build a remediation plan.</p>
+          <div className="text-xs text-slate-400 space-y-4 h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-blue-900 scrollbar-track-transparent">
+            <p className="font-bold text-slate-200">When you click <span className="text-red-400">SIMULATE BREACH</span>, the following occurs:</p>
+            
+            <div className="space-y-1">
+              <h3 className="text-blue-300 font-bold">1. Identity & Access Management (The "Inside Man")</h3>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-slate-300">Over-Privileged User:</strong> It takes an existing IAM user (<code>dev-user-01</code>) and attaches the AdministratorAccess policy. This violates the principle of least privilege.</li>
+                <li><strong className="text-slate-300">Credential Generation:</strong> It generates programmatic Access Keys for this user. These keys are then "leaked" into the script below to perform unauthorized actions.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-blue-300 font-bold">2. Networking (The "Open Door")</h3>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-slate-300">Insecure VPC:</strong> It creates a VPC named <code>aegis-public-vpc-no-logs</code>. The name is literal—it lacks VPC Flow Logs, meaning there is no record of network traffic entering or leaving the environment.</li>
+                <li><strong className="text-slate-300">Public Exposure:</strong> It sets up an Internet Gateway and a subnet that automatically assigns public IP addresses to any instance launched within it.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-blue-300 font-bold">3. Storage (The "Data Leak")</h3>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-slate-300">Public S3 Bucket:</strong> It creates an S3 bucket and explicitly disables all "Public Access Block" settings. This makes the bucket capable of hosting data accessible to anyone on the internet.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-blue-300 font-bold">4. Compute (The "Weak Target")</h3>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-slate-300">Vulnerable EC2:</strong> It launches a Linux server (T3.micro) that is unencrypted and sits in a public subnet.</li>
+                <li><strong className="text-slate-300">Security Group:</strong> It creates a Security Group that allows all outbound traffic, leaving the inbound "front door" for the script to manipulate.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-blue-300 font-bold">5. The "Crime Spree" (The Simulation)</h3>
+              <p>The <code>null_resource</code> block is the most unique part of this code. Once the infrastructure is ready, it runs a local script using the <code>dev-user-01</code> credentials to simulate a malicious insider:</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-slate-300">Rogue Storage:</strong> It creates a second S3 bucket (<code>aegis-rogue-bucket-static-demo</code>) outside of Terraform's direct management.</li>
+                <li><strong className="text-slate-300">Network Breach:</strong> It opens port 22 (SSH) to the entire world (0.0.0.0/0).</li>
+                <li><strong className="text-slate-300">Metadata Downgrade:</strong> It forces the EC2 instance to use IMDSv1. This is a major security risk that allows for potential "Server-Side Request Forgery" (SSRF) attacks to steal the instance's identity.</li>
+              </ul>
+            </div>
+
+            <div className="pt-2 border-t border-blue-500/30">
+              <p className="text-emerald-400 font-bold">
+                The AEGIS Agent will detect all of these vulnerabilities and autonomously remediate them.
+              </p>
+            </div>
           </div>
         </div>
         <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-5">
@@ -286,6 +354,14 @@ export default function Home() {
             >
               💥 SIMULATE BREACH
             </button>
+            {status === 'ATTACKING' && (
+              <button 
+                onClick={handleQuit}
+                className="w-full mt-2 py-2 bg-red-950 hover:bg-red-900 text-red-200 font-bold rounded shadow-lg transition-all border border-red-800 flex items-center justify-center gap-2"
+              >
+                <Square className="w-4 h-4 fill-current" /> STOP SIMULATION
+              </button>
+            )}
           </div>
 
           <div className={`p-6 rounded-lg border bg-slate-900/50 ${status === 'DEFENDING' ? 'border-blue-500' : 'border-blue-900/30'}`}>
@@ -297,6 +373,14 @@ export default function Home() {
             >
               🛡️ DEPLOY AEGIS
             </button>
+            {status === 'DEFENDING' && (
+              <button 
+                onClick={handleQuit}
+                className="w-full mt-2 py-2 bg-blue-950 hover:bg-blue-900 text-blue-200 font-bold rounded shadow-lg transition-all border border-blue-800 flex items-center justify-center gap-2"
+              >
+                <Square className="w-4 h-4 fill-current" /> STOP AGENT
+              </button>
+            )}
           </div>
         </div>
 

@@ -23,6 +23,14 @@ RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -
     && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
     && apt-get update && apt-get install -y google-cloud-cli
 
+# 4.5 Install AWS CLI
+# Required for Terraform local-exec provisioners that use the 'aws' command
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install \
+    && aws --version \
+    && rm -rf aws awscliv2.zip
+
 # 5. Set Working Directory
 WORKDIR /app
 
@@ -35,6 +43,7 @@ RUN pip install --no-cache-dir fastapi uvicorn google-cloud-storage langchain la
 # This is the "Fix": We copy the TF files and RUN init during the build.
 # This downloads the Google and Null providers into the image itself.
 COPY infrastructure/ ./infrastructure/
+RUN rm -rf infrastructure/terraform/.terraform infrastructure/terraform/*.tfstate*
 RUN terraform -chdir=infrastructure/terraform init
 
 # 8. Copy remaining Application Code

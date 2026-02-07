@@ -20,8 +20,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global tracker for the active subprocess (Terraform) to allow cancellation
+active_process = None
+
+# [DEBUG] Verify Environment on Startup
+print(f"🚀 AEGIS SERVER STARTING... (Build Time: {int(time.time())}) - VERSION: FORCE_UPDATE_003")
+print(f"[SYSTEM] AWS CLI Version: {subprocess.getoutput('aws --version')}")
+
 # Ensure DB exists
-max_retries = 5
+max_retries = 30  # Increased to handle Cloud SQL cold starts (can take 45s+)
 for i in range(max_retries):
     try:
         init_db()
@@ -32,8 +39,8 @@ for i in range(max_retries):
             print(f"❌ [CRITICAL] Database Connection Failed after {max_retries} attempts: {e}")
             print("💡 TIP: Check Cloud SQL API, IAM Roles, and ensure the database exists.")
             raise e
-        print(f"⚠️ Database connection failed (attempt {i+1}/{max_retries}). Retrying in 3s...")
-        time.sleep(3)
+        print(f"⚠️ Database connection failed (attempt {i+1}/{max_retries}): {e}")
+        time.sleep(2)
 
 # Allow overriding Terraform directory via env var (useful for persistent volume mounts)
 TERRAFORM_DIR = os.environ.get("TERRAFORM_DIR", os.path.join(os.getcwd(), "infrastructure", "terraform"))
@@ -52,12 +59,17 @@ class ProcessManager:
         if self.is_running and self.process.poll() is None:
             return # Already running
 
+        # Pass environment variables to ensure Cloud SQL connection works in subprocess
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
         self.process = subprocess.Popen(
             ['python','-u', 'main.py'],
             cwd=os.getcwd(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            env=env,
             text=True,
             bufsize=1,
             universal_newlines=True
@@ -136,6 +148,7 @@ def approve_remediation():
 
 def execute_terraform(command):
     """Simple runner for Terraform (no interaction needed)"""
+    global active_process
     try:
         # 1. Force non-interactive mode to prevent hanging on missing vars
         if "terraform" in command and "-input=false" not in command:
@@ -145,18 +158,23 @@ def execute_terraform(command):
         env = os.environ.copy()
         env["TF_IN_AUTOMATION"] = "true"
 
-        process = subprocess.Popen(
+        active_process = subprocess.Popen(
             command, cwd=TERRAFORM_DIR, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
             env=env
         )
-        for line in iter(process.stdout.readline, ''):
+        for line in iter(active_process.stdout.readline, ''):
             if line: yield line
-        process.stdout.close()
-        if process.wait() != 0:
+        
+        active_process.stdout.close()
+        return_code = active_process.wait()
+        active_process = None
+        
+        if return_code != 0:
             yield "\n[ERROR] Terraform command failed. Check logs above for details.\n"
+            raise Exception("Terraform command failed")
     except Exception as e:
-        yield f"\n[CRITICAL ERROR] {str(e)}\n"
+        raise e
 
 @app.get("/api/reset")
 def reset_lab():
@@ -168,12 +186,32 @@ def reset_lab():
 
     def reset_sequence():
         try:
+            # [FIX] Ensure Terraform is initialized with the backend at runtime
+            # This is crucial because build-time init lacks GCS credentials
+            yield "\n>>> [PHASE -1] INITIALIZING TERRAFORM BACKEND...\n"
+            for line in execute_terraform("terraform init -reconfigure -input=false"):
+                yield line
+
+            # [FIX] Force remove the null_resource from state to prevent "aws: not found" errors
+            # during destroy if the previous state contains the old shell-based provisioner.
+            yield "\n>>> [PHASE 0] SANITIZING STATE (Removing stuck resources)...\n"
+            rm_proc = subprocess.run(
+                "terraform state rm null_resource.insider_threat_simulation",
+                cwd=TERRAFORM_DIR, shell=True, capture_output=True, text=True
+            )
+            if rm_proc.returncode != 0 and "No such resource" not in rm_proc.stderr:
+                 yield f"[INFO] State rm output: {rm_proc.stderr}\n"
+
             yield "\n>>> [PHASE 1] INITIALIZING DESTRUCTION...\n"
             for line in execute_terraform("terraform destroy -auto-approve"): yield line
             
             yield "\n>>> [PHASE 2] INJECTING VULNERABILITIES (DB UPDATE)...\n"
             reset_to_vulnerable()
-            yield ">>> [DB] DASHBOARD STATUS SET TO: 🔴 VULNERABLE\n"
+            
+            # Verify DB update
+            statuses = get_all_status()
+            vuln_count = sum(1 for s in statuses if s['status'] == 'VULNERABLE')
+            yield f">>> [DB] DASHBOARD STATUS SET TO: 🔴 VULNERABLE ({vuln_count} checks updated)\n"
 
             yield "\n>>> [PHASE 3] DEPLOYING VULNERABLE INFRASTRUCTURE...\n"
             for line in execute_terraform("terraform apply -auto-approve"): yield line
@@ -196,6 +234,28 @@ def force_unlock():
         return {"status": "lock_released", "message": "System is now free for new simulations."}
     return {"status": "already_free", "message": "No lock was active."}
 
+@app.post("/api/stop")
+def stop_process():
+    """Kills any running Terraform or Agent process."""
+    global active_process
+    
+    # 1. Stop Terraform / Reset
+    if active_process:
+        if active_process.poll() is None:
+            print("[SYSTEM] Killing active Terraform process...")
+            active_process.terminate()
+            try:
+                active_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                active_process.kill()
+        active_process = None
+
+    # 2. Stop Agent
+    if agent_manager.is_running and agent_manager.process:
+        print("[SYSTEM] Killing active Agent process...")
+        agent_manager.process.terminate()
+
+    return {"status": "stopped"}
 
 if __name__ == "__main__":
     import uvicorn
